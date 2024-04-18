@@ -1,7 +1,6 @@
-import { Editor, createShapeId, getSvgAsImage } from '@tldraw/tldraw'
 import { track } from '@vercel/analytics/react'
+import { Editor, createShapeId, getSvgAsImage } from 'tldraw'
 import { PreviewShape } from '../PreviewShape/PreviewShape'
-import { addGridToSvg } from './addGridToSvg'
 import { blobToBase64 } from './blobToBase64'
 import { getHtmlFromOpenAI } from './getHtmlFromOpenAI'
 import { getSelectionAsText } from './getSelectionAsText'
@@ -31,8 +30,8 @@ export async function makeReal(editor: Editor, apiKey: string) {
 	})
 
 	// Add the grid lines to the SVG
-	const grid = { color: 'red', size: 100, labels: true }
-	addGridToSvg(svg, grid)
+	// const grid = { color: 'red', size: 100, labels: true }
+	// addGridToSvg(svg, grid)
 
 	if (!svg) throw Error(`Could not get the SVG.`)
 
@@ -62,7 +61,7 @@ export async function makeReal(editor: Editor, apiKey: string) {
 			apiKey,
 			text: getSelectionAsText(editor),
 			previousPreviews,
-			grid,
+			// grid,
 			theme: editor.user.getUserPreferences().isDarkMode ? 'dark' : 'light',
 		})
 
@@ -71,6 +70,7 @@ export async function makeReal(editor: Editor, apiKey: string) {
 		}
 
 		if (json?.error) {
+			console.error(json.error.message)
 			throw Error(`${json.error.message?.slice(0, 128)}...`)
 		}
 

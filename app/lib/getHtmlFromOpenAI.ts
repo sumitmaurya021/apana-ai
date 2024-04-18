@@ -59,7 +59,7 @@ export async function getHtmlFromOpenAI({
 	if (text) {
 		userContent.push({
 			type: 'text',
-			text: `Here's a list of text that we found in the design:\n${text}`,
+			text: `Here's a list of all the text that we found in the design. Use it as a reference if anything is hard to read in the screenshot(s):\n${text}`,
 		})
 	}
 
@@ -99,7 +99,7 @@ export async function getHtmlFromOpenAI({
 	})
 
 	const body: GPT4VCompletionRequest = {
-		model: 'gpt-4-vision-preview',
+		model: 'gpt-4-turbo',
 		max_tokens: 4096,
 		temperature: 0,
 		messages,
@@ -146,7 +146,7 @@ type MessageContent =
 	  )[]
 
 export type GPT4VCompletionRequest = {
-	model: 'gpt-4-vision-preview'
+	model: 'gpt-4-turbo'
 	messages: {
 		role: 'system' | 'user' | 'assistant' | 'function'
 		content: MessageContent
