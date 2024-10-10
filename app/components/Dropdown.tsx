@@ -6,7 +6,7 @@ import {
 	createReplitProject,
 	createStackBlitzProject,
 	getCodeSandboxUrl,
-} from '../lib/uploadToThirdParty'
+} from '../lib/third-parties'
 
 export function Dropdown({
 	boxShadow,
@@ -35,7 +35,7 @@ export function Dropdown({
 		if (navigator && navigator.clipboard) {
 			navigator.clipboard.writeText(html)
 			toast.addToast({
-				icon: 'code',
+				// icon: 'code',
 				title: 'Copied html to clipboard',
 			})
 		}
@@ -62,7 +62,6 @@ export function Dropdown({
 	const openInReplit = useCallback(async () => {
 		try {
 			const { error, url } = await createReplitProject(html)
-			console.log(error, url)
 			if (error) {
 				console.error(error)
 				throw Error()

@@ -1,4 +1,5 @@
 /* eslint-disable react-hooks/rules-of-hooks */
+import { ReactElement, useEffect, useRef } from 'react'
 import {
 	BaseBoxShapeUtil,
 	DefaultSpinner,
@@ -7,20 +8,19 @@ import {
 	TLBaseShape,
 	TldrawUiIcon,
 	Vec,
+	stopEventPropagation,
 	toDomPrecision,
 	useIsEditing,
-	useToasts,
 	useValue,
 } from 'tldraw'
-import { useEffect } from 'react'
 import { Dropdown } from '../components/Dropdown'
 import { LINK_HOST, PROTOCOL } from '../lib/hosts'
-import { uploadLink } from '../lib/uploadLink'
 
 export type PreviewShape = TLBaseShape<
 	'preview',
 	{
 		html: string
+		parts: string[]
 		source: string
 		w: number
 		h: number
@@ -37,21 +37,23 @@ export class PreviewShapeUtil extends BaseBoxShapeUtil<PreviewShape> {
 		return {
 			html: '',
 			source: '',
+			parts: [],
 			w: (960 * 2) / 3,
 			h: (540 * 2) / 3,
 			dateCreated: Date.now(),
 		}
 	}
 
-	override canEdit = () => true
+	// Only allow editing once the shape's content is finished
+	override canEdit = (shape: PreviewShape) =>
+		shape.props.parts.length > 0 || shape.props.html.length > 0
+
 	override isAspectRatioLocked = (_shape: PreviewShape) => false
+
 	override canResize = (_shape: PreviewShape) => true
-	override canBind = (_shape: PreviewShape) => false
-	override canUnmount = () => false
 
 	override component(shape: PreviewShape) {
 		const isEditing = useIsEditing(shape.id)
-		const toast = useToasts()
 
 		const boxShadow = useValue(
 			'box shadow',
@@ -62,64 +64,70 @@ export class PreviewShapeUtil extends BaseBoxShapeUtil<PreviewShape> {
 			[this.editor]
 		)
 
-		const { html, linkUploadVersion, uploadedShapeId } = shape.props
+		const { linkUploadVersion, uploadedShapeId } = shape.props
 
-		// upload the html if we haven't already:
-		useEffect(() => {
-			let isCancelled = false
-			if (html && (linkUploadVersion === undefined || uploadedShapeId !== shape.id)) {
-				;(async () => {
-					await uploadLink(shape.id, html)
-					if (isCancelled) return
+		const isOnlySelected = useValue(
+			'is only selected',
+			() => this.editor.getOnlySelectedShapeId() === shape.id,
+			[shape.id, this.editor]
+		)
 
-					this.editor.updateShape<PreviewShape>({
-						id: shape.id,
-						type: 'preview',
-						props: {
-							linkUploadVersion: 1,
-							uploadedShapeId: shape.id,
-						},
-					})
-				})()
-			}
-			return () => {
-				isCancelled = true
-			}
-		}, [shape.id, html, linkUploadVersion, uploadedShapeId])
+		const rIframe = useRef<HTMLIFrameElement>(null)
 
 		const isLoading = linkUploadVersion === undefined || uploadedShapeId !== shape.id
 
 		const uploadUrl = [PROTOCOL, LINK_HOST, '/', shape.id.replace(/^shape:/, '')].join('')
+
+		const htmlIsEmpty = shape.props.parts?.length === 0
+
+		const rCursor = useRef(0)
+
+		useEffect(() => {
+			if (!isLoading) return
+			const iframe = rIframe.current
+			if (!iframe) return
+
+			if (!shape.props.parts) return
+
+			for (let i = rCursor.current; i < shape.props.parts.length; i++) {
+				const part = shape.props.parts[i]
+				iframe.contentDocument.write(part)
+			}
+
+			rCursor.current = shape.props.parts.length
+
+			// iframe.contentDocument.close()
+			// iframe.contentDocument.open()
+			// iframe.contentDocument.write(html)
+		}, [isLoading, shape.props.parts])
+
+		console.log(shape.props.html)
 
 		return (
 			<HTMLContainer className="tl-embed-container" id={shape.id}>
 				{isLoading ? (
 					<div
 						style={{
+							position: 'relative',
 							width: '100%',
 							height: '100%',
 							backgroundColor: 'var(--color-culled)',
-							display: 'flex',
-							alignItems: 'center',
-							justifyContent: 'center',
 							boxShadow,
 							border: '1px solid var(--color-panel-contrast)',
 							borderRadius: 'var(--radius-2)',
 						}}
 					>
-						<DefaultSpinner />
-					</div>
-				) : (
-					<>
 						<iframe
+							ref={rIframe}
 							id={`iframe-1-${shape.id}`}
-							src={`${uploadUrl}?preview=1&v=${linkUploadVersion}`}
 							width={toDomPrecision(shape.props.w)}
 							height={toDomPrecision(shape.props.h)}
+							allow="geolocation;midi;usb;magnetometer;fullscreen;animations;picture-in-picture;accelerometer;vr;camera;microphone"
 							draggable={false}
 							style={{
+								opacity: 0.62,
 								backgroundColor: 'var(--color-panel)',
-								pointerEvents: isEditing ? 'auto' : 'none',
+								pointerEvents: 'none', // isEditing ? 'auto' : 'none',
 								boxShadow,
 								border: '1px solid var(--color-panel-contrast)',
 								borderRadius: 'var(--radius-2)',
@@ -140,12 +148,53 @@ export class PreviewShapeUtil extends BaseBoxShapeUtil<PreviewShape> {
 								pointerEvents: 'all',
 							}}
 						>
-							<Dropdown boxShadow={boxShadow} html={shape.props.html} uploadUrl={uploadUrl}>
-								<button className="bg-white rounded p-2" style={{ boxShadow }}>
-									<TldrawUiIcon icon="dots-vertical" />
-								</button>
-							</Dropdown>
+							<DefaultSpinner />
 						</div>
+					</div>
+				) : (
+					<>
+						<iframe
+							id={`iframe-1-${shape.id}`}
+							src={`${uploadUrl}?preview=1&v=${linkUploadVersion}`}
+							width={toDomPrecision(shape.props.w)}
+							height={toDomPrecision(shape.props.h)}
+							draggable={false}
+							allow="geolocation;midi;usb;magnetometer;fullscreen;animations;picture-in-picture;accelerometer;vr;camera;microphone"
+							style={{
+								backgroundColor: 'var(--color-panel)',
+								pointerEvents: isEditing ? 'auto' : 'none',
+								boxShadow,
+								border: '1px solid var(--color-panel-contrast)',
+								borderRadius: 'var(--radius-2)',
+							}}
+						/>
+						{isOnlySelected && (
+							<div
+								style={{
+									all: 'unset',
+									position: 'absolute',
+									top: -3,
+									right: -45,
+									height: 40,
+									width: 40,
+									display: 'flex',
+									alignItems: 'center',
+									justifyContent: 'center',
+									cursor: 'pointer',
+									pointerEvents: 'all',
+								}}
+							>
+								<Dropdown boxShadow={boxShadow} html={shape.props.html} uploadUrl={uploadUrl}>
+									<button
+										className="bg-white rounded p-2"
+										style={{ boxShadow }}
+										onPointerDown={stopEventPropagation}
+									>
+										<TldrawUiIcon icon="dots-vertical" />
+									</button>
+								</Dropdown>
+							</div>
+						)}
 						<div
 							style={{
 								textAlign: 'center',
@@ -179,25 +228,24 @@ export class PreviewShapeUtil extends BaseBoxShapeUtil<PreviewShape> {
 		)
 	}
 
-	override toSvg(shape: PreviewShape, _ctx: SvgExportContext): SVGElement | Promise<SVGElement> {
-		const g = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+	override toSvg(shape: PreviewShape, _ctx: SvgExportContext) {
 		// while screenshot is the same as the old one, keep waiting for a new one
-		return new Promise((resolve, _) => {
-			if (window === undefined) return resolve(g)
+		return new Promise<ReactElement>((resolve, reject) => {
+			if (window === undefined) {
+				reject()
+				return
+			}
+
 			const windowListener = (event: MessageEvent) => {
 				if (event.data.screenshot && event.data?.shapeid === shape.id) {
-					const image = document.createElementNS('http://www.w3.org/2000/svg', 'image')
-					image.setAttributeNS('http://www.w3.org/1999/xlink', 'href', event.data.screenshot)
-					image.setAttribute('width', shape.props.w.toString())
-					image.setAttribute('height', shape.props.h.toString())
-					g.appendChild(image)
 					window.removeEventListener('message', windowListener)
 					clearTimeout(timeOut)
-					resolve(g)
+
+					resolve(<PreviewImage href={event.data.screenshot} shape={shape} />)
 				}
 			}
 			const timeOut = setTimeout(() => {
-				resolve(g)
+				reject()
 				window.removeEventListener('message', windowListener)
 			}, 2000)
 			window.addEventListener('message', windowListener)
@@ -209,7 +257,7 @@ export class PreviewShapeUtil extends BaseBoxShapeUtil<PreviewShape> {
 					'*'
 				)
 			} else {
-				console.log('first level iframe not found or not accessible')
+				console.error('first level iframe not found or not accessible')
 			}
 		})
 	}
@@ -246,4 +294,8 @@ function getRotatedBoxShadow(rotation: number) {
 		return `${x}px ${y}px ${blur}px ${spread}px ${color}`
 	})
 	return cssStrings.join(', ')
+}
+
+function PreviewImage({ shape, href }: { shape: PreviewShape; href: string }) {
+	return <image href={href} width={shape.props.w.toString()} height={shape.props.h.toString()} />
 }
